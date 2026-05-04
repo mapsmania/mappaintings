@@ -12,13 +12,22 @@ const map = new maplibregl.Map({
 let countiesData = null;
 
 // -----------------------------
-// MAP INIT
+// MAP LOAD
 // -----------------------------
 map.on('load', async () => {
 
-  // Load GeoJSON safely (we store it ourselves too)
-  countiesData = await fetch('combined_counties.geojson')
+  const raw = await fetch('combined_counties.geojson')
     .then(r => r.json());
+
+  // Normalize GeoJSON (CRITICAL FIX)
+  countiesData = Array.isArray(raw)
+    ? { type: "FeatureCollection", features: raw }
+    : raw;
+
+  if (!countiesData?.features) {
+    console.error("Invalid GeoJSON:", countiesData);
+    return;
+  }
 
   map.addSource('counties', {
     type: 'geojson',
@@ -50,7 +59,7 @@ map.on('load', async () => {
 });
 
 // -----------------------------
-// CANVAS + IMAGE SETUP
+// CANVAS + IMAGE
 // -----------------------------
 const canvas = document.getElementById('overlay');
 const ctx = canvas.getContext('2d');
@@ -64,11 +73,24 @@ let imgState = {
 };
 
 // -----------------------------
-// RESIZE HANDLING
+// RESIZE + RENDER LOOP
 // -----------------------------
 function resizeCanvas() {
   canvas.width = map.getCanvas().width;
   canvas.height = map.getCanvas().height;
+}
+
+function render() {
+  if (!img || !img.complete || !img.width) return;
+
+  const w = img.width * imgState.scale;
+  const h = img.height * imgState.scale;
+
+  imgState.x = canvas.width / 2 - w / 2;
+  imgState.y = canvas.height / 2 - h / 2;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, imgState.x, imgState.y, w, h);
 }
 
 map.on('resize', () => {
@@ -78,6 +100,10 @@ map.on('resize', () => {
 
 map.on('move', render);
 map.on('zoom', render);
+map.on('load', () => {
+  resizeCanvas();
+  render();
+});
 
 // -----------------------------
 // IMAGE UPLOAD
@@ -102,30 +128,14 @@ document.getElementById('upload').addEventListener('change', (e) => {
 });
 
 // -----------------------------
-// RENDER IMAGE ON CANVAS
-// -----------------------------
-function render() {
-  if (!img || !img.complete || !img.width) return;
-
-  const w = img.width * imgState.scale;
-  const h = img.height * imgState.scale;
-
-  imgState.x = canvas.width / 2 - w / 2;
-  imgState.y = canvas.height / 2 - h / 2;
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(img, imgState.x, imgState.y, w, h);
-}
-
-// -----------------------------
 // PIXEL SAMPLING
 // -----------------------------
 function getPixelColor(x, y) {
-  const data = ctx.getImageData(x, y, 1, 1).data;
+  const d = ctx.getImageData(x, y, 1, 1).data;
 
-  if (!data || data.length < 3) return null;
+  if (!d || d.length < 3) return null;
 
-  return `rgb(${data[0]}, ${data[1]}, ${data[2]})`;
+  return `rgb(${d[0]}, ${d[1]}, ${d[2]})`;
 }
 
 // -----------------------------
@@ -161,23 +171,26 @@ function getCentroid(coords) {
 // -----------------------------
 document.getElementById('apply').addEventListener('click', () => {
 
+  if (!countiesData?.features) {
+    console.error("GeoJSON not loaded correctly");
+    return;
+  }
+
   if (!img || !img.complete) {
     alert("Image not loaded yet");
     return;
   }
 
-  const source = map.getSource('counties');
-
-  // work on a copy (avoid MapLibre internal mutation issues)
   const data = JSON.parse(JSON.stringify(countiesData));
 
   data.features.forEach(feature => {
 
-    const coords = getRepresentativeCoords(feature.geometry);
+    const geom = feature.geometry;
+    const coords = getRepresentativeCoords(geom);
     if (!coords) return;
 
-    const centroidLngLat = getCentroid(coords);
-    const point = map.project(centroidLngLat);
+    const centroid = getCentroid(coords);
+    const point = map.project(centroid);
 
     const x = Math.floor(point.x);
     const y = Math.floor(point.y);
@@ -195,10 +208,11 @@ document.getElementById('apply').addEventListener('click', () => {
 
     const color = getPixelColor(localX, localY);
 
-    // fallback to avoid MapLibre null error
+    // fallback prevents MapLibre "null color" warning
     feature.properties.color = color || "rgb(200,200,200)";
   });
 
   countiesData = data;
-  source.setData(data);
+
+  map.getSource('counties').setData(data);
 });
