@@ -233,20 +233,25 @@ document.getElementById('apply').addEventListener('click', () => {
 });
 
 document.getElementById('downloadImg').addEventListener('click', () => {
-  // 1. Hide the overlay canvas completely so it's not in the way
+
   const overlay = document.getElementById('overlay');
+
+  // HARD disable overlay so it cannot bleed into render timing
   overlay.style.display = 'none';
 
-  // 2. MapLibre needs to be told to render a frame specifically for the buffer
-  map.once('render', () => {
+  // Force MapLibre to fully redraw WITHOUT overlay influence
+  map.once('idle', () => {
+
+    const canvas = map.getCanvas();
+
     const link = document.createElement('a');
     link.download = 'county-map-art.png';
-    // Explicitly grab the map's canvas, not the overlay
-    link.href = map.getCanvas().toDataURL('image/png');
+    link.href = canvas.toDataURL('image/png');
+
     link.click();
-    
-    // 3. Optional: bring the overlay back if you want to keep editing
-    // overlay.style.display = 'block'; 
+
+    // Optional: restore overlay
+    overlay.style.display = 'block';
   });
 
   map.triggerRepaint();
