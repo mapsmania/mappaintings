@@ -180,10 +180,11 @@ document.getElementById('apply').addEventListener('click', () => {
   startLiveUpdates();
 });
 
-const video = document.getElementById('webcam');
-let useVideoSource = false; // Toggle between static img and live video
+// Change this to match the hidden video element ID
+const video = document.getElementById('webcamVideo'); 
+let useVideoSource = false; 
 
-// --- 1. START THE WEBCAM ---
+// Change this to match the button ID 'startLive'
 document.getElementById('startLive').addEventListener('click', async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -191,18 +192,23 @@ document.getElementById('startLive').addEventListener('click', async () => {
     useVideoSource = true;
     liveMode = true;
     
-    // Position the "video" in the center (using video dimensions)
     video.onloadedmetadata = () => {
+      // Ensure canvas is visible for the initial positioning
+      canvas.style.opacity = 1;
+      canvas.style.pointerEvents = "auto";
+
       imgState.scale = 0.5;
       imgState.x = (canvas.width / 2) - (video.videoWidth * imgState.scale / 2);
       imgState.y = (canvas.height / 2) - (video.videoHeight * imgState.scale / 2);
-      startLiveUpdates(); // Start the 2-second map refresh
+      
+      // We start the loop, but usually users want to "Apply" first
+      // If you want it instant, call startLiveUpdates() here.
     };
   } catch (err) {
+    console.error(err);
     alert("Camera blocked or not found.");
   }
 });
-
 // --- 2. UPDATE THE RENDER LOOP ---
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
