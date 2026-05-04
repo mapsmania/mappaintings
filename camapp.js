@@ -164,35 +164,6 @@ map.on('load', async () => {
 
 map.on('resize', resizeCanvas);
 
-// -----------------------------
-// 7. IMAGE UPLOAD
-// -----------------------------
-document.getElementById('upload').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-
-  reader.onload = () => {
-    img = new Image();
-
-    img.onload = () => {
-      // Show overlay for positioning
-      canvas.style.opacity = 1;
-      canvas.style.pointerEvents = "auto";
-
-      liveMode = false;
-
-      imgState.scale = 0.5;
-      imgState.x = (canvas.width / 2) - (img.width * imgState.scale / 2);
-      imgState.y = (canvas.height / 2) - (img.height * imgState.scale / 2);
-    };
-
-    img.src = reader.result;
-  };
-
-  reader.readAsDataURL(file);
-});
 
 // -----------------------------
 // 8. APPLY → START LIVE MODE
@@ -209,17 +180,55 @@ document.getElementById('apply').addEventListener('click', () => {
   startLiveUpdates();
 });
 
-// -----------------------------
-// 9. LIVE UPDATE LOOP
-// -----------------------------
-function startLiveUpdates() {
-  if (liveInterval) clearInterval(liveInterval);
+const video = document.getElementById('webcam');
+let useVideoSource = false; // Toggle between static img and live video
 
-  liveInterval = setInterval(() => {
-    updateCountiesFromCanvas();
-  }, 2000);
+// --- 1. START THE WEBCAM ---
+document.getElementById('startLive').addEventListener('click', async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    video.srcObject = stream;
+    useVideoSource = true;
+    liveMode = true;
+    
+    // Position the "video" in the center (using video dimensions)
+    video.onloadedmetadata = () => {
+      imgState.scale = 0.5;
+      imgState.x = (canvas.width / 2) - (video.videoWidth * imgState.scale / 2);
+      imgState.y = (canvas.height / 2) - (video.videoHeight * imgState.scale / 2);
+      startLiveUpdates(); // Start the 2-second map refresh
+    };
+  } catch (err) {
+    alert("Camera blocked or not found.");
+  }
+});
+
+// --- 2. UPDATE THE RENDER LOOP ---
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Determine what to draw: the static image OR the live video frame
+  const source = useVideoSource ? video : img;
+  
+  // Guard: if using video, ensure it has data; if image, ensure it's loaded
+  const isReady = useVideoSource ? video.readyState >= 2 : (img.complete && img.width);
+
+  if (isReady) {
+    const w = (useVideoSource ? video.videoWidth : img.width) * imgState.scale;
+    const h = (useVideoSource ? video.videoHeight : img.height) * imgState.scale;
+
+    // This grabs the CURRENT frame if 'source' is a video
+    ctx.drawImage(source, imgState.x, imgState.y, w, h);
+
+    if (!liveMode) {
+      ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(imgState.x, imgState.y, w, h);
+    }
+  }
+
+  requestAnimationFrame(render);
 }
-
 // -----------------------------
 // 10. COLOR SAMPLING
 // -----------------------------
