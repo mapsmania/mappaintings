@@ -232,7 +232,7 @@ document.getElementById('apply').addEventListener('click', () => {
   canvas.style.display = "none";
 });
 
-document.getElementById('downloadImg').addEventListener('click', () => {
+document.getElementById('download').addEventListener('click', () => {
 
   const overlay = document.getElementById('overlay');
 
