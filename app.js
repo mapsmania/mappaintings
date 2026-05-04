@@ -170,50 +170,47 @@ function getCentroid(coords) {
 // APPLY IMAGE → COUNTIES
 // -----------------------------
 document.getElementById('apply').addEventListener('click', () => {
+  if (!countiesData?.features || !img.complete) return;
 
-  if (!countiesData?.features) {
-    console.error("GeoJSON not loaded correctly");
-    return;
-  }
+  // 1. Capture the entire canvas state once
+  const canvasW = canvas.width;
+  const canvasH = canvas.height;
+  const pixelData = ctx.getImageData(0, 0, canvasW, canvasH).data;
 
-  if (!img || !img.complete) {
-    alert("Image not loaded yet");
-    return;
-  }
-
+  // 2. Clone the GeoJSON (MapLibre needs a new object to trigger a re-draw)
   const data = JSON.parse(JSON.stringify(countiesData));
 
   data.features.forEach(feature => {
-
-    const geom = feature.geometry;
-    const coords = getRepresentativeCoords(geom);
+    // 3. Get the center point of the county
+    const coords = getRepresentativeCoords(feature.geometry);
     if (!coords) return;
 
     const centroid = getCentroid(coords);
-    const point = map.project(centroid);
+    const point = map.project(centroid); // Converts [lng, lat] to [x, y] screen pixels
 
     const x = Math.floor(point.x);
     const y = Math.floor(point.y);
 
-    const w = img.width * imgState.scale;
-    const h = img.height * imgState.scale;
+    // 4. Check if the county center falls within the canvas area
+    if (x >= 0 && x < canvasW && y >= 0 && y < canvasH) {
+      // Index formula for RGBA array: (row * width + column) * 4 bytes
+      const i = (y * canvasW + x) * 4;
+      
+      const r = pixelData[i];
+      const g = pixelData[i + 1];
+      const b = pixelData[i + 2];
+      const a = pixelData[i + 3];
 
-    const localX = x - imgState.x;
-    const localY = y - imgState.y;
-
-    if (
-      localX < 0 || localY < 0 ||
-      localX >= w || localY >= h
-    ) return;
-
-    const color = getPixelColor(localX, localY);
-
-    // fallback prevents MapLibre "null color" warning
-    feature.properties.color = color || "rgb(200,200,200)";
+      // Only apply if the pixel isn't fully transparent
+      if (a > 1) {
+        feature.properties.color = `rgb(${r}, ${g}, ${b})`;
+      } else {
+        feature.properties.color = "#eeeeee"; // Default empty color
+      }
+    }
   });
 
+  // 5. Update the source data - MapLibre handles the heavy lifting of re-coloring
   countiesData = data;
-
   map.getSource('counties').setData(data);
-  canvas.style.display = "none";
 });
