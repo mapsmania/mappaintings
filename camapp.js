@@ -229,6 +229,21 @@ function render() {
 
   requestAnimationFrame(render);
 }
+
+// -----------------------------
+// 9. LIVE UPDATE LOOP
+// -----------------------------
+function startLiveUpdates() {
+  // Clear any existing interval to prevent "stacking" multiple loops
+  if (liveInterval) clearInterval(liveInterval);
+
+  liveInterval = setInterval(() => {
+    // Only update if the map isn't moving (prevents lag during zoom/pan)
+    if (!map.isMoving() && !map.isZooming()) {
+      updateCountiesFromCanvas();
+    }
+  }, 2000); // 2 seconds feels like a good balance for performance
+}
 // -----------------------------
 // 10. COLOR SAMPLING
 // -----------------------------
