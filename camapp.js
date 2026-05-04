@@ -181,6 +181,7 @@ document.getElementById('apply').addEventListener('click', () => {
 });
 
 // Change this to match the hidden video element ID
+// Change this to match the hidden video element ID
 const video = document.getElementById('webcamVideo'); 
 let useVideoSource = false; 
 
@@ -209,6 +210,7 @@ document.getElementById('startLive').addEventListener('click', async () => {
     alert("Camera blocked or not found.");
   }
 });
+
 // --- 2. UPDATE THE RENDER LOOP ---
 function render() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
