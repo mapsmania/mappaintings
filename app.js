@@ -250,8 +250,7 @@ document.getElementById('download').addEventListener('click', () => {
 
     link.click();
 
-    // Optional: restore overlay
-    overlay.style.display = 'block';
+    
   });
 
   map.triggerRepaint();
