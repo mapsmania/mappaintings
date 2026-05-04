@@ -230,3 +230,23 @@ document.getElementById('apply').addEventListener('click', () => {
   map.getSource('counties').setData(data);
   canvas.style.display = "none";
 });
+
+document.getElementById('download').addEventListener('click', () => {
+
+  const exportCanvas = document.createElement('canvas');
+  const ctx2 = exportCanvas.getContext('2d');
+
+  exportCanvas.width = map.getCanvas().width;
+  exportCanvas.height = map.getCanvas().height;
+
+  // 1. draw map
+  ctx2.drawImage(map.getCanvas(), 0, 0);
+
+  // 2. draw overlay
+  ctx2.drawImage(canvas, 0, 0);
+
+  const link = document.createElement('a');
+  link.download = 'map-result.png';
+  link.href = exportCanvas.toDataURL('image/png');
+  link.click();
+});
