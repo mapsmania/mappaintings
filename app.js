@@ -170,6 +170,7 @@ function getCentroid(coords) {
 // APPLY IMAGE → COUNTIES
 // -----------------------------
 document.getElementById('apply').addEventListener('click', () => {
+  render(); // force final sync before sampling
   if (!countiesData?.features || !img.complete) return;
 
   // 1. Capture the entire canvas state once
