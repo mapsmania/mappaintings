@@ -213,4 +213,5 @@ document.getElementById('apply').addEventListener('click', () => {
   // 5. Update the source data - MapLibre handles the heavy lifting of re-coloring
   countiesData = data;
   map.getSource('counties').setData(data);
+  canvas.style.display = "none";
 });
