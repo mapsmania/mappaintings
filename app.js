@@ -3,6 +3,7 @@
 // -----------------------------
 const map = new maplibregl.Map({
   container: 'map',
+  preserveDrawingBuffer: true,
   style: {
     version: 8,
     sources: {},
