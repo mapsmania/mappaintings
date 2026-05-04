@@ -19,15 +19,9 @@ map.on('load', async () => {
   const raw = await fetch('combined_counties.geojson')
     .then(r => r.json());
 
-  // Normalize GeoJSON (CRITICAL FIX)
   countiesData = Array.isArray(raw)
     ? { type: "FeatureCollection", features: raw }
     : raw;
-
-  if (!countiesData?.features) {
-    console.error("Invalid GeoJSON:", countiesData);
-    return;
-  }
 
   map.addSource('counties', {
     type: 'geojson',
@@ -73,7 +67,7 @@ let imgState = {
 };
 
 // -----------------------------
-// RESIZE + RENDER LOOP
+// RESIZE + RENDER
 // -----------------------------
 function resizeCanvas() {
   canvas.width = map.getCanvas().width;
@@ -100,10 +94,6 @@ map.on('resize', () => {
 
 map.on('move', render);
 map.on('zoom', render);
-map.on('load', () => {
-  resizeCanvas();
-  render();
-});
 
 // -----------------------------
 // IMAGE UPLOAD
@@ -116,11 +106,7 @@ document.getElementById('upload').addEventListener('change', (e) => {
 
   reader.onload = () => {
     img = new Image();
-
-    img.onload = () => {
-      render();
-    };
-
+    img.onload = render;
     img.src = reader.result;
   };
 
@@ -128,29 +114,13 @@ document.getElementById('upload').addEventListener('change', (e) => {
 });
 
 // -----------------------------
-// PIXEL SAMPLING
-// -----------------------------
-function getPixelColor(x, y) {
-  const d = ctx.getImageData(x, y, 1, 1).data;
-
-  if (!d || d.length < 3) return null;
-
-  return `rgb(${d[0]}, ${d[1]}, ${d[2]})`;
-}
-
-// -----------------------------
 // GEOMETRY HELPERS
 // -----------------------------
 function getRepresentativeCoords(geom) {
   if (!geom) return null;
 
-  if (geom.type === "Polygon") {
-    return geom.coordinates[0];
-  }
-
-  if (geom.type === "MultiPolygon") {
-    return geom.coordinates?.[0]?.[0] || null;
-  }
+  if (geom.type === "Polygon") return geom.coordinates[0];
+  if (geom.type === "MultiPolygon") return geom.coordinates?.[0]?.[0] || null;
 
   return null;
 }
@@ -167,52 +137,81 @@ function getCentroid(coords) {
 }
 
 // -----------------------------
+// MULTI-SAMPLE OFFSETS
+// -----------------------------
+const sampleOffsets = [
+  [0.25, 0.25],
+  [0.75, 0.25],
+  [0.25, 0.75],
+  [0.75, 0.75]
+];
+
+// -----------------------------
 // APPLY IMAGE → COUNTIES
 // -----------------------------
 document.getElementById('apply').addEventListener('click', () => {
-  render(); // force final sync before sampling
+
+  render();
+
   if (!countiesData?.features || !img.complete) return;
 
-  // 1. Capture the entire canvas state once
   const canvasW = canvas.width;
   const canvasH = canvas.height;
+
   const pixelData = ctx.getImageData(0, 0, canvasW, canvasH).data;
 
-  // 2. Clone the GeoJSON (MapLibre needs a new object to trigger a re-draw)
   const data = JSON.parse(JSON.stringify(countiesData));
 
   data.features.forEach(feature => {
-    // 3. Get the center point of the county
+
     const coords = getRepresentativeCoords(feature.geometry);
     if (!coords) return;
 
     const centroid = getCentroid(coords);
-    const point = map.project(centroid); // Converts [lng, lat] to [x, y] screen pixels
 
-    const x = Math.floor(point.x);
-    const y = Math.floor(point.y);
+    let r = 0, g = 0, b = 0, count = 0;
 
-    // 4. Check if the county center falls within the canvas area
-    if (x >= 0 && x < canvasW && y >= 0 && y < canvasH) {
-      // Index formula for RGBA array: (row * width + column) * 4 bytes
+    // -----------------------------
+    // MULTI-SAMPLE LOOP
+    // -----------------------------
+    sampleOffsets.forEach(offset => {
+
+      const point = map.project([
+        centroid[0] + (offset[0] - 0.5) * 0.05,
+        centroid[1] + (offset[1] - 0.5) * 0.05
+      ]);
+
+      const x = Math.floor(point.x);
+      const y = Math.floor(point.y);
+
+      if (x < 0 || y < 0 || x >= canvasW || y >= canvasH) return;
+
       const i = (y * canvasW + x) * 4;
-      
-      const r = pixelData[i];
-      const g = pixelData[i + 1];
-      const b = pixelData[i + 2];
-      const a = pixelData[i + 3];
 
-      // Only apply if the pixel isn't fully transparent
-      if (a > 1) {
-        feature.properties.color = `rgb(${r}, ${g}, ${b})`;
-      } else {
-        feature.properties.color = "#eeeeee"; // Default empty color
-      }
+      const a = pixelData[i + 3];
+      if (a <= 1) return;
+
+      r += pixelData[i];
+      g += pixelData[i + 1];
+      b += pixelData[i + 2];
+
+      count++;
+    });
+
+    if (count === 0) {
+      feature.properties.color = "#eeeeee";
+      return;
     }
+
+    feature.properties.color = `rgb(
+      ${Math.floor(r / count)},
+      ${Math.floor(g / count)},
+      ${Math.floor(b / count)}
+    )`;
   });
 
-  // 5. Update the source data - MapLibre handles the heavy lifting of re-coloring
   countiesData = data;
   map.getSource('counties').setData(data);
+
   canvas.style.display = "none";
 });
