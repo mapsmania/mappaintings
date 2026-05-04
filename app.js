@@ -44,7 +44,7 @@ function resizeCanvas() {
 
 function render() {
   // Guard clause: don't draw if image isn't ready or canvas is hidden
-  if (!img || !img.complete || !img.width || canvas.style.display === "none") return;
+  if (!img || !img.complete || !img.width) return;
 
   const w = img.width * imgState.scale;
   const h = img.height * imgState.scale;
@@ -156,22 +156,27 @@ document.getElementById('upload').addEventListener('change', (e) => {
   if (!file) return;
 
   const reader = new FileReader();
+
   reader.onload = () => {
     img = new Image();
+
     img.onload = () => {
-      // --- THE FIX ---
-      canvas.style.display = "block"; 
-      canvas.style.pointerEvents = "auto"; // Ensure it can be dragged
-      
-      // Reset image state for the new upload
+
+      // 🔥 IMPORTANT: always re-enable canvas
+      canvas.style.display = "block";
+      canvas.style.pointerEvents = "auto";
+
+      // reset state so image ALWAYS appears centered
       imgState.scale = 0.5;
-      imgState.x = (canvas.width / 2) - (img.width * 0.5 / 2);
-      imgState.y = (canvas.height / 2) - (img.height * 0.5 / 2);
-      
+      imgState.x = (canvas.width / 2) - (img.width * imgState.scale / 2);
+      imgState.y = (canvas.height / 2) - (img.height * imgState.scale / 2);
+
       render();
     };
+
     img.src = reader.result;
   };
+
   reader.readAsDataURL(file);
 });
 
