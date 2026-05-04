@@ -233,21 +233,21 @@ document.getElementById('apply').addEventListener('click', () => {
 });
 
 document.getElementById('downloadImg').addEventListener('click', () => {
-  // If the overlay is still visible, we might want to hide it for the photo
-  const wasVisible = canvas.style.display !== "none";
-  if (wasVisible) canvas.style.display = "none";
+  // 1. Hide the overlay canvas completely so it's not in the way
+  const overlay = document.getElementById('overlay');
+  overlay.style.display = 'none';
 
-  // Force a re-render to ensure the buffer is fresh
-  map.triggerRepaint();
-
-  // Give the map a tiny moment to paint, then capture
-  requestAnimationFrame(() => {
+  // 2. MapLibre needs to be told to render a frame specifically for the buffer
+  map.once('render', () => {
     const link = document.createElement('a');
-    link.download = 'my-county-art.png';
+    link.download = 'county-map-art.png';
+    // Explicitly grab the map's canvas, not the overlay
     link.href = map.getCanvas().toDataURL('image/png');
     link.click();
-
-    // Bring overlay back if it was there
-    if (wasVisible) canvas.style.display = "block";
+    
+    // 3. Optional: bring the overlay back if you want to keep editing
+    // overlay.style.display = 'block'; 
   });
+
+  map.triggerRepaint();
 });
