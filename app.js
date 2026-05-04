@@ -215,4 +215,5 @@ document.getElementById('apply').addEventListener('click', () => {
   countiesData = data;
 
   map.getSource('counties').setData(data);
+  canvas.style.display = "none";
 });
