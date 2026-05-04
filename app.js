@@ -11,6 +11,52 @@ const map = new maplibregl.Map({
 
 let countiesData = null;
 
+let isDragging = false;
+let startX, startY;
+
+// -----------------------------
+// MOUSE CONTROLS
+// -----------------------------
+
+// Dragging Logic
+canvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  startX = e.offsetX - imgState.x;
+  startY = e.offsetY - imgState.y;
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+
+  // Update position based on mouse movement
+  imgState.x = e.offsetX - startX;
+  imgState.y = e.offsetY - startY;
+  
+  render();
+});
+
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+});
+
+// Scaling Logic (Mouse Wheel)
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault(); // Stop the map from zooming
+
+  const scaleAmount = e.deltaY * -0.001;
+  const newScale = Math.min(Math.max(0.05, imgState.scale + scaleAmount), 5);
+  
+  // Optional: Adjust X/Y so it scales from the center
+  const widthDiff = (img.width * newScale) - (img.width * imgState.scale);
+  const heightDiff = (img.height * newScale) - (img.height * imgState.scale);
+  
+  imgState.x -= widthDiff / 2;
+  imgState.y -= heightDiff / 2;
+  imgState.scale = newScale;
+
+  render();
+}, { passive: false });
+
 // -----------------------------
 // MAP LOAD
 // -----------------------------
@@ -75,15 +121,22 @@ function resizeCanvas() {
 }
 
 function render() {
-  if (!img || !img.complete || !img.width) return;
+  if (!img || !img.complete || !img.width || canvas.style.display === "none") return;
 
   const w = img.width * imgState.scale;
   const h = img.height * imgState.scale;
 
-  imgState.x = canvas.width / 2 - w / 2;
-  imgState.y = canvas.height / 2 - h / 2;
+  // REMOVE OR COMMENT OUT THESE TWO LINES:
+  // imgState.x = canvas.width / 2 - w / 2;
+  // imgState.y = canvas.height / 2 - h / 2;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  // Draw a semi-transparent border so the user knows the "hitbox"
+  ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(imgState.x, imgState.y, w, h);
+  
   ctx.drawImage(img, imgState.x, imgState.y, w, h);
 }
 
