@@ -159,11 +159,15 @@ document.getElementById('upload').addEventListener('change', (e) => {
   reader.onload = () => {
     img = new Image();
     img.onload = () => {
-      canvas.style.display = "block";
-      // Center the image initially based on current canvas size
+      // --- THE FIX ---
+      canvas.style.display = "block"; 
+      canvas.style.pointerEvents = "auto"; // Ensure it can be dragged
+      
+      // Reset image state for the new upload
       imgState.scale = 0.5;
       imgState.x = (canvas.width / 2) - (img.width * 0.5 / 2);
       imgState.y = (canvas.height / 2) - (img.height * 0.5 / 2);
+      
       render();
     };
     img.src = reader.result;
