@@ -232,21 +232,22 @@ document.getElementById('apply').addEventListener('click', () => {
   canvas.style.display = "none";
 });
 
-document.getElementById('download').addEventListener('click', () => {
+document.getElementById('downloadImg').addEventListener('click', () => {
+  // If the overlay is still visible, we might want to hide it for the photo
+  const wasVisible = canvas.style.display !== "none";
+  if (wasVisible) canvas.style.display = "none";
 
-  const exportCanvas = document.createElement('canvas');
-  const ctx2 = exportCanvas.getContext('2d');
+  // Force a re-render to ensure the buffer is fresh
+  map.triggerRepaint();
 
-  const mapCanvas = map.getCanvas();
+  // Give the map a tiny moment to paint, then capture
+  requestAnimationFrame(() => {
+    const link = document.createElement('a');
+    link.download = 'my-county-art.png';
+    link.href = map.getCanvas().toDataURL('image/png');
+    link.click();
 
-  exportCanvas.width = mapCanvas.width;
-  exportCanvas.height = mapCanvas.height;
-
-  // 1. draw the ACTUAL map (counties + colors)
-  ctx2.drawImage(mapCanvas, 0, 0);
-
-  const link = document.createElement('a');
-  link.download = 'map-result.png';
-  link.href = exportCanvas.toDataURL('image/png');
-  link.click();
+    // Bring overlay back if it was there
+    if (wasVisible) canvas.style.display = "block";
+  });
 });
