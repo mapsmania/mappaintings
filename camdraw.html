@@ -92,7 +92,13 @@
   <canvas id="overlay"></canvas>
 
   <!-- ADD THIS HIDDEN VIDEO ELEMENT HERE -->
-  <video id="webcamVideo" autoplay playsinline style="display:none;"></video>
+  <video 
+  id="webcamVideo" 
+  autoplay 
+  playsinline 
+  muted
+  style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;">
+</video>
 
   <div class="controls">
     <h3 style="margin:0 0 5px 0; font-size: 18px;">Map Cam</h3>
