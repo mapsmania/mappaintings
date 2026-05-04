@@ -8,8 +8,8 @@ const map = new maplibregl.Map({
     sources: {},
     layers: []
   },
-  center: [-96.5, 38.5], 
-  zoom: 4
+  center: [-98.5, 39.8],
+  zoom: 3
 });
 
 // -----------------------------
