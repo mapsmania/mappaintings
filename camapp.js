@@ -323,3 +323,41 @@ document.getElementById('download').addEventListener('click', () => {
 
   map.triggerRepaint();
 });
+
+// -----------------------------
+// 12. SELFIE / DOWNLOAD LOGIC
+// -----------------------------
+document.getElementById('download').addEventListener('click', () => {
+  // 1. If we are in live mode, ensure the latest colors are applied one last time
+  if (liveMode) {
+    updateCountiesFromCanvas();
+  }
+
+  // 2. Wait for the map to finish rendering the new data
+  map.once('idle', () => {
+    try {
+      // Get the map's canvas element
+      const mapCanvas = map.getCanvas();
+      
+      // Convert to an image URL
+      const dataURL = mapCanvas.toDataURL('image/png');
+
+      // Create a temporary link to trigger the download
+      const link = document.createElement('a');
+      link.download = `map-selfie-${Date.now()}.png`;
+      link.href = dataURL;
+      
+      // Append, click, and remove
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+    } catch (err) {
+      console.error("Failed to capture map:", err);
+      alert("Error capturing the map image.");
+    }
+  });
+
+  // Force a repaint to trigger the 'idle' event accurately
+  map.triggerRepaint();
+});
