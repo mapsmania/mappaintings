@@ -127,7 +127,7 @@ function getCentroid(coords) {
 // 6. MAP LOAD
 // -----------------------------
 map.on('load', async () => {
-  const raw = await fetch('combined_counties.geojson').then(r => r.json());
+  const raw = await fetch('lower.geojson').then(r => r.json());
 
   countiesData = Array.isArray(raw)
     ? { type: "FeatureCollection", features: raw }
