@@ -10,7 +10,12 @@ const map = new maplibregl.Map({
     layers: []
   },
   center: [-98.5, 39.8],
-  zoom: 3
+  zoom: 4
+});
+
+// Ensure transparent background
+map.on('load', () => {
+  map.getCanvas().style.background = 'transparent';
 });
 
 // -----------------------------
@@ -26,7 +31,7 @@ let img = new Image();
 let imgState = {
   x: 50,
   y: 50,
-  scale: 0.5
+  scale: 1
 };
 
 let isDragging = false;
@@ -35,45 +40,51 @@ let startX, startY;
 let liveMode = false;
 let liveInterval = null;
 
+let useVideoSource = false;
+const video = document.getElementById('webcamVideo');
+
 const sampleOffsets = [
   [0.25, 0.25], [0.75, 0.25],
   [0.25, 0.75], [0.75, 0.75]
 ];
 
 // -----------------------------
-// 3. CORE FUNCTIONS
+// 3. CANVAS RESIZE
 // -----------------------------
 function resizeCanvas() {
   canvas.width = map.getCanvas().width;
   canvas.height = map.getCanvas().height;
 }
 
-// 🔥 Continuous render loop
+// -----------------------------
+// 4. RENDER LOOP (image OR video)
+// -----------------------------
 function render() {
-  if (!img || !img.complete || !img.width) {
-    requestAnimationFrame(render);
-    return;
-  }
-
-  const w = img.width * imgState.scale;
-  const h = img.height * imgState.scale;
-
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Optional positioning border
-  if (!liveMode) {
-    ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(imgState.x, imgState.y, w, h);
-  }
+  const source = useVideoSource ? video : img;
+  const isReady = useVideoSource
+    ? video.readyState >= 2
+    : (img.complete && img.width);
 
-  ctx.drawImage(img, imgState.x, imgState.y, w, h);
+  if (isReady) {
+    const w = (useVideoSource ? video.videoWidth : img.width) * imgState.scale;
+    const h = (useVideoSource ? video.videoHeight : img.height) * imgState.scale;
+
+    ctx.drawImage(source, imgState.x, imgState.y, w, h);
+
+    if (!liveMode) {
+      ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(imgState.x, imgState.y, w, h);
+    }
+  }
 
   requestAnimationFrame(render);
 }
 
 // -----------------------------
-// 4. INTERACTION LISTENERS
+// 5. INTERACTION
 // -----------------------------
 canvas.addEventListener('mousedown', (e) => {
   if (liveMode) return;
@@ -108,7 +119,7 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 // -----------------------------
-// 5. GEOMETRY HELPERS
+// 6. GEOMETRY HELPERS
 // -----------------------------
 function getRepresentativeCoords(geom) {
   if (!geom) return null;
@@ -124,10 +135,10 @@ function getCentroid(coords) {
 }
 
 // -----------------------------
-// 6. MAP LOAD
+// 7. MAP LOAD
 // -----------------------------
 map.on('load', async () => {
-  const raw = await fetch('lower.geojson').then(r => r.json());
+  const raw = await fetch('https://mapsmania.github.io/mappaintings/low.geojson').then(r => r.json());
 
   countiesData = Array.isArray(raw)
     ? { type: "FeatureCollection", features: raw }
@@ -159,51 +170,41 @@ map.on('load', async () => {
   });
 
   resizeCanvas();
-  render(); // 🔥 start loop
+  render();
 });
 
 map.on('resize', resizeCanvas);
 
-
 // -----------------------------
-// 8. APPLY → START LIVE MODE
+// 8. APPLY LIVE MODE
 // -----------------------------
 document.getElementById('apply').addEventListener('click', () => {
   if (!countiesData?.features || !img.complete) return;
 
-  // Hide visually but KEEP sampling
   canvas.style.opacity = 0;
   canvas.style.pointerEvents = "none";
 
   liveMode = true;
-
   startLiveUpdates();
 });
 
-// Change this to match the hidden video element ID
-// Change this to match the hidden video element ID
-const video = document.getElementById('webcamVideo'); 
-let useVideoSource = false; 
-
-// Change this to match the button ID 'startLive'
+// -----------------------------
+// 9. START CAMERA
+// -----------------------------
 document.getElementById('startLive').addEventListener('click', async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     video.srcObject = stream;
     useVideoSource = true;
     liveMode = true;
-    
+
     video.onloadedmetadata = () => {
-      // Ensure canvas is visible for the initial positioning
       canvas.style.opacity = 1;
       canvas.style.pointerEvents = "auto";
 
-      imgState.scale = 0.5;
+      imgState.scale = 1;
       imgState.x = (canvas.width / 2) - (video.videoWidth * imgState.scale / 2);
       imgState.y = (canvas.height / 2) - (video.videoHeight * imgState.scale / 2);
-      
-      // We start the loop, but usually users want to "Apply" first
-      // If you want it instant, call startLiveUpdates() here.
     };
   } catch (err) {
     console.error(err);
@@ -211,55 +212,24 @@ document.getElementById('startLive').addEventListener('click', async () => {
   }
 });
 
-// --- 2. UPDATE THE RENDER LOOP ---
-function render() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Determine what to draw: the static image OR the live video frame
-  const source = useVideoSource ? video : img;
-  
-  // Guard: if using video, ensure it has data; if image, ensure it's loaded
-  const isReady = useVideoSource ? video.readyState >= 2 : (img.complete && img.width);
-
-  if (isReady) {
-    const w = (useVideoSource ? video.videoWidth : img.width) * imgState.scale;
-    const h = (useVideoSource ? video.videoHeight : img.height) * imgState.scale;
-
-    // This grabs the CURRENT frame if 'source' is a video
-    ctx.drawImage(source, imgState.x, imgState.y, w, h);
-
-    if (!liveMode) {
-      ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
-      ctx.lineWidth = 2;
-      ctx.strokeRect(imgState.x, imgState.y, w, h);
-    }
-  }
-
-  requestAnimationFrame(render);
-}
-
 // -----------------------------
-// 9. LIVE UPDATE LOOP
+// 10. LIVE UPDATE LOOP
 // -----------------------------
 function startLiveUpdates() {
-  // Clear any existing interval to prevent "stacking" multiple loops
   if (liveInterval) clearInterval(liveInterval);
 
   liveInterval = setInterval(() => {
-    // Only update if the map isn't moving (prevents lag during zoom/pan)
     if (!map.isMoving() && !map.isZooming()) {
       updateCountiesFromCanvas();
     }
-  }, 2000); // 2 seconds feels like a good balance for performance
+  }, 2000);
 }
+
 // -----------------------------
-// 10. COLOR SAMPLING
+// 11. COLOR SAMPLING
 // -----------------------------
 function updateCountiesFromCanvas() {
-  const canvasW = canvas.width;
-  const canvasH = canvas.height;
-
-  const pixelData = ctx.getImageData(0, 0, canvasW, canvasH).data;
+  const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
 
   const data = JSON.parse(JSON.stringify(countiesData));
 
@@ -280,12 +250,10 @@ function updateCountiesFromCanvas() {
       const x = Math.floor(point.x);
       const y = Math.floor(point.y);
 
-      if (x < 0 || y < 0 || x >= canvasW || y >= canvasH) return;
+      if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return;
 
-      const i = (y * canvasW + x) * 4;
-      const a = pixelData[i + 3];
-
-      if (a <= 1) return;
+      const i = (y * canvas.width + x) * 4;
+      if (pixelData[i + 3] <= 1) return;
 
       r += pixelData[i];
       g += pixelData[i + 1];
@@ -293,71 +261,95 @@ function updateCountiesFromCanvas() {
       count++;
     });
 
-    if (count === 0) {
-      feature.properties.color = "#eeeeee";
-    } else {
-      feature.properties.color =
-        `rgb(${Math.floor(r / count)}, ${Math.floor(g / count)}, ${Math.floor(b / count)})`;
-    }
+    feature.properties.color = count === 0
+      ? "#eeeeee"
+      : `rgb(${Math.floor(r / count)}, ${Math.floor(g / count)}, ${Math.floor(b / count)})`;
   });
 
   countiesData = data;
   map.getSource('counties').setData(data);
 }
 
-// -----------------------------
-// 11. DOWNLOAD MAP IMAGE
-// -----------------------------
+
+
+
 document.getElementById('download').addEventListener('click', () => {
-  const overlay = document.getElementById('overlay');
-  overlay.style.display = 'none';
+    if (!countiesData?.features?.length) return;
 
-  map.once('idle', () => {
-    const link = document.createElement('a');
-    link.download = 'county-map-art.png';
-    link.href = map.getCanvas().toDataURL('image/png');
-    link.click();
+    // -----------------------------
+    // 1. TRUE GEO BOUNDS (fixed)
+    // -----------------------------
+    const bounds = new maplibregl.LngLatBounds();
 
-    overlay.style.display = 'block';
-  });
+    countiesData.features.forEach(f => {
+        const geom = f.geometry;
+        if (!geom) return;
 
-  map.triggerRepaint();
-});
+        if (geom.type === "Polygon") {
+            geom.coordinates.forEach(ring => {
+                ring.forEach(pt => bounds.extend(pt));
+            });
+        }
 
-// -----------------------------
-// 12. SELFIE / DOWNLOAD LOGIC
-// -----------------------------
-document.getElementById('download').addEventListener('click', () => {
-  // 1. If we are in live mode, ensure the latest colors are applied one last time
-  if (liveMode) {
-    updateCountiesFromCanvas();
-  }
+        if (geom.type === "MultiPolygon") {
+            geom.coordinates.forEach(poly => {
+                poly.forEach(ring => {
+                    ring.forEach(pt => bounds.extend(pt));
+                });
+            });
+        }
+    });
 
-  // 2. Wait for the map to finish rendering the new data
-  map.once('idle', () => {
-    try {
-      // Get the map's canvas element
-      const mapCanvas = map.getCanvas();
-      
-      // Convert to an image URL
-      const dataURL = mapCanvas.toDataURL('image/png');
+    // -----------------------------
+    // 2. Create export map
+    // -----------------------------
+    const container = document.createElement('div');
+    container.style.width = '3840px';
+    container.style.height = '2160px';
+    container.style.position = 'absolute';
+    container.style.top = '-9999px';
+    document.body.appendChild(container);
 
-      // Create a temporary link to trigger the download
-      const link = document.createElement('a');
-      link.download = `map-selfie-${Date.now()}.png`;
-      link.href = dataURL;
-      
-      // Append, click, and remove
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-    } catch (err) {
-      console.error("Failed to capture map:", err);
-      alert("Error capturing the map image.");
-    }
-  });
+    const renderMap = new maplibregl.Map({
+        container,
+        style: map.getStyle(),
+        interactive: false,
+        preserveDrawingBuffer: true,
+        attributionControl: false
+    });
 
-  // Force a repaint to trigger the 'idle' event accurately
-  map.triggerRepaint();
+    renderMap.on('load', () => {
+        renderMap.setRenderWorldCopies(false);
+
+        // -----------------------------
+        // 3. CRITICAL: exact camera
+        // -----------------------------
+        renderMap.fitBounds(bounds, {
+            padding: 0,
+            animate: false
+        });
+
+        renderMap.once('idle', () => {
+
+            const canvas = renderMap.getCanvas();
+
+            // -----------------------------
+            // 4. ONLY crop to canvas bounds (NOT pixel detection)
+            // -----------------------------
+            const cropCanvas = document.createElement('canvas');
+            cropCanvas.width = canvas.width;
+            cropCanvas.height = canvas.height;
+
+            const ctx = cropCanvas.getContext('2d');
+            ctx.drawImage(canvas, 0, 0);
+
+            const link = document.createElement('a');
+            link.download = 'map-export.png';
+            link.href = cropCanvas.toDataURL('image/png');
+            link.click();
+
+            renderMap.remove();
+            document.body.removeChild(container);
+        });
+    });
 });
