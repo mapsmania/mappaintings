@@ -28,7 +28,7 @@ const map = new maplibregl.Map({
   },
 
   center: [-73.9857, 40.7484],
-  zoom: 16,
+  zoom: 13.5,
   pitch: 0,
   bearing: 0
 });
@@ -272,7 +272,7 @@ function overpassToGeoJSON(data) {
 // --------------------------------
 async function loadBuildings() {
 
-  if (map.getZoom() < 15)
+  if (map.getZoom() < 13)
     return;
 
   const b = map.getBounds();
@@ -288,7 +288,7 @@ async function loadBuildings() {
     way["building"]
     (${south},${west},${north},${east});
   );
-  out geom qt 2500;
+  out geom;
   `;
 
   console.log(
