@@ -1,417 +1,590 @@
-// -----------------------------
-// 1. INITIALIZE MAP
-// -----------------------------
+
+// ================================
+// BUILDING FOOTPRINT WEBCAM PAINTER
+// MapLibre + Overpass + Canvas Sampling
+// ================================
+
+// --------------------------------
+// 1. MAP SETUP
+// --------------------------------
 const map = new maplibregl.Map({
   container: 'map',
   preserveDrawingBuffer: true,
   style: {
     version: 8,
     sources: {},
-    layers: []
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        paint: {
+          'background-color': '#111'
+        }
+      }
+    ]
   },
-  center: [-98.5, 39.8],
-  zoom: 4
+  center: [-73.9857, 40.7484], // NYC
+  zoom: 16,
+  pitch: 0,
+  bearing: 0
 });
 
-// Ensure transparent background
-map.on('load', () => {
-  map.getCanvas().style.background = 'transparent';
-});
-
-// -----------------------------
-// 2. STATE & GLOBALS
-// -----------------------------
-let countiesData = null;
+// --------------------------------
+// 2. GLOBALS
+// --------------------------------
+let buildingsData = null;
 
 const canvas = document.getElementById('overlay');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', {
+  willReadFrequently: true
+});
 
-let img = new Image();
+const video = document.getElementById('webcamVideo');
 
+let liveMode = false;
+let useVideoSource = false;
+
+let liveInterval = null;
+
+// image/video placement
 let imgState = {
-  x: 50,
-  y: 50,
-  scale: 1
+  x: 100,
+  y: 100,
+  scale: 0.5
 };
 
 let isDragging = false;
-let startX, startY;
+let dragStartX = 0;
+let dragStartY = 0;
 
-let liveMode = false;
-let liveInterval = null;
-
-let useVideoSource = false;
-const video = document.getElementById('webcamVideo');
-
-const sampleOffsets = [
-  [0.25, 0.25], [0.75, 0.25],
-  [0.25, 0.75], [0.75, 0.75]
-];
-
-// -----------------------------
-// 3. CANVAS RESIZE
-// -----------------------------
+// --------------------------------
+// 3. RESIZE CANVAS
+// --------------------------------
 function resizeCanvas() {
   canvas.width = map.getCanvas().width;
   canvas.height = map.getCanvas().height;
 }
 
-// -----------------------------
-// 4. RENDER LOOP (image OR video)
-// -----------------------------
-function render() {
+map.on('resize', resizeCanvas);
+
+// --------------------------------
+// 4. MAIN RENDER LOOP
+// --------------------------------
+function renderOverlay() {
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const source = useVideoSource ? video : img;
-  const isReady = useVideoSource
-    ? video.readyState >= 2
-    : (img.complete && img.width);
+  if (
+    useVideoSource &&
+    video.readyState >= 2
+  ) {
 
-  if (isReady) {
-    const w = (useVideoSource ? video.videoWidth : img.width) * imgState.scale;
-    const h = (useVideoSource ? video.videoHeight : img.height) * imgState.scale;
+    const w = video.videoWidth * imgState.scale;
+    const h = video.videoHeight * imgState.scale;
 
-    ctx.drawImage(source, imgState.x, imgState.y, w, h);
+    ctx.drawImage(
+      video,
+      imgState.x,
+      imgState.y,
+      w,
+      h
+    );
 
+    // edit rectangle
     if (!liveMode) {
-      ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
+
+      ctx.strokeStyle = 'lime';
       ctx.lineWidth = 2;
-      ctx.strokeRect(imgState.x, imgState.y, w, h);
+
+      ctx.strokeRect(
+        imgState.x,
+        imgState.y,
+        w,
+        h
+      );
     }
   }
 
-  requestAnimationFrame(render);
+  requestAnimationFrame(renderOverlay);
 }
 
-// -----------------------------
+// --------------------------------
 // 5. INTERACTION
-// -----------------------------
+// --------------------------------
 canvas.addEventListener('mousedown', (e) => {
+
   if (liveMode) return;
+
   isDragging = true;
-  startX = e.offsetX - imgState.x;
-  startY = e.offsetY - imgState.y;
+
+  dragStartX = e.offsetX - imgState.x;
+  dragStartY = e.offsetY - imgState.y;
 });
 
 window.addEventListener('mousemove', (e) => {
+
   if (!isDragging || liveMode) return;
-  imgState.x = e.offsetX - startX;
-  imgState.y = e.offsetY - startY;
+
+  imgState.x = e.offsetX - dragStartX;
+  imgState.y = e.offsetY - dragStartY;
 });
 
 window.addEventListener('mouseup', () => {
   isDragging = false;
 });
 
+// zoom image
 canvas.addEventListener('wheel', (e) => {
-  if (!img.width || liveMode) return;
+
+  if (liveMode) return;
+
   e.preventDefault();
 
-  const scaleAmount = e.deltaY * -0.001;
-  const newScale = Math.min(Math.max(0.05, imgState.scale + scaleAmount), 5);
+  const delta = e.deltaY * -0.001;
 
-  const widthDiff = (img.width * newScale) - (img.width * imgState.scale);
-  const heightDiff = (img.height * newScale) - (img.height * imgState.scale);
+  const oldScale = imgState.scale;
 
-  imgState.x -= widthDiff / 2;
-  imgState.y -= heightDiff / 2;
-  imgState.scale = newScale;
+  imgState.scale = Math.min(
+    Math.max(0.05, imgState.scale + delta),
+    5
+  );
+
+  const scaleRatio = imgState.scale / oldScale;
+
+  const mx = e.offsetX;
+  const my = e.offsetY;
+
+  imgState.x = mx - (mx - imgState.x) * scaleRatio;
+  imgState.y = my - (my - imgState.y) * scaleRatio;
+
 }, { passive: false });
 
-// -----------------------------
-// 6. GEOMETRY HELPERS
-// -----------------------------
-function getRepresentativeCoords(geom) {
-  if (!geom) return null;
-  if (geom.type === "Polygon") return geom.coordinates[0];
-  if (geom.type === "MultiPolygon") return geom.coordinates?.[0]?.[0] || null;
-  return null;
-}
+// --------------------------------
+// 6. OVERPASS → GEOJSON
+// --------------------------------
+function overpassToGeoJSON(data) {
 
-function getCentroid(coords) {
+  const features = [];
 
-  let area = 0;
-  let cx = 0;
-  let cy = 0;
+  data.elements.forEach(el => {
 
-  for (let i = 0; i < coords.length - 1; i++) {
+    if (
+      el.type !== 'way' ||
+      !el.geometry
+    ) return;
 
-    const x1 = coords[i][0];
-    const y1 = coords[i][1];
+    const coords = el.geometry.map(g => [
+      g.lon,
+      g.lat
+    ]);
 
-    const x2 = coords[i + 1][0];
-    const y2 = coords[i + 1][1];
+    if (coords.length < 3) return;
 
-    const f = (x1 * y2) - (x2 * y1);
+    // close polygon
+    if (
+      coords[0][0] !== coords[coords.length - 1][0] ||
+      coords[0][1] !== coords[coords.length - 1][1]
+    ) {
+      coords.push(coords[0]);
+    }
 
-    area += f;
-
-    cx += (x1 + x2) * f;
-    cy += (y1 + y2) * f;
-  }
-
-  area *= 0.5;
-
-  // fallback for invalid polygons
-  if (Math.abs(area) < 1e-7) {
-
-    let x = 0;
-    let y = 0;
-
-    coords.forEach(c => {
-      x += c[0];
-      y += c[1];
+    features.push({
+      type: 'Feature',
+      properties: {
+        id: el.id,
+        color: '#999999'
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [coords]
+      }
     });
 
-    return [
-      x / coords.length,
-      y / coords.length
-    ];
+  });
+
+  return {
+    type: 'FeatureCollection',
+    features
+  };
+}
+
+// --------------------------------
+// 7. LOAD BUILDINGS
+// --------------------------------
+async function loadBuildings() {
+
+  // avoid insane requests
+  if (map.getZoom() < 15) return;
+
+  const b = map.getBounds();
+
+  const south = b.getSouth();
+  const west = b.getWest();
+  const north = b.getNorth();
+  const east = b.getEast();
+
+  const query = `
+  [out:json][timeout:25];
+  (
+    way["building"](${south},${west},${north},${east});
+  );
+  out geom;
+  `;
+
+  console.log("Loading buildings...");
+
+  const response = await fetch(
+    'https://overpass-api.de/api/interpreter',
+    {
+      method: 'POST',
+      body: query
+    }
+  );
+
+  const raw = await response.json();
+
+  const geojson = overpassToGeoJSON(raw);
+
+  buildingsData = geojson;
+
+  if (map.getSource('buildings')) {
+
+    map.getSource('buildings')
+      .setData(buildingsData);
+
+  } else {
+
+    map.addSource('buildings', {
+      type: 'geojson',
+      data: buildingsData
+    });
+
+    map.addLayer({
+      id: 'buildings-fill',
+      type: 'fill',
+      source: 'buildings',
+      paint: {
+        'fill-color': [
+          'coalesce',
+          ['get', 'color'],
+          '#888'
+        ],
+        'fill-opacity': 0.95
+      }
+    });
+
+    map.addLayer({
+      id: 'buildings-outline',
+      type: 'line',
+      source: 'buildings',
+      paint: {
+        'line-color': '#000',
+        'line-width': 1
+      }
+    });
   }
 
-  cx /= (6 * area);
-  cy /= (6 * area);
-
-  return [cx, cy];
+  console.log(
+    `Loaded ${geojson.features.length} buildings`
+  );
 }
 
-// -----------------------------
-// 7. MAP LOAD
-// -----------------------------
-map.on('load', async () => {
-  const raw = await fetch('https://mapsmania.github.io/mappaintings/low.geojson').then(r => r.json());
+// --------------------------------
+// 8. GEOMETRY HELPERS
+// --------------------------------
+function getPolygonCentroid(coords) {
 
-  countiesData = Array.isArray(raw)
-    ? { type: "FeatureCollection", features: raw }
-    : raw;
+  let x = 0;
+  let y = 0;
 
-  map.addSource('counties', {
-    type: 'geojson',
-    data: countiesData
+  coords.forEach(c => {
+    x += c[0];
+    y += c[1];
   });
 
-  map.addLayer({
-    id: 'counties-fill',
-    type: 'fill',
-    source: 'counties',
-    paint: {
-      'fill-color': ['coalesce', ['get', 'color'], '#cccccc'],
-      'fill-opacity': 0.8
-    }
-  });
-
-  map.addLayer({
-    id: 'counties-outline',
-    type: 'line',
-    source: 'counties',
-    paint: {
-      'line-color': '#222',
-      'line-width': 0.5
-    }
-  });
-
-  resizeCanvas();
-  render();
-});
-
-map.on('resize', resizeCanvas);
-
-// -----------------------------
-// LOAD MP4 VIDEO
-// -----------------------------
-document.getElementById('startLive').addEventListener('click', () => {
-
-  video.src = 'clouds.mp4';
-
-  video.loop = true;
-  video.muted = true;
-  video.autoplay = true;
-  video.playsInline = true;
-
-  video.onloadedmetadata = async () => {
-
-    // START VIDEO ONLY AFTER METADATA EXISTS
-    await video.play();
-
-    useVideoSource = true;
-    liveMode = true;
-
-    canvas.style.opacity = 1;
-    canvas.style.pointerEvents = "none";
-
-    // ---------------------------------
-    // SCALE VIDEO TO FIT SCREEN
-    // ---------------------------------
-
-    const videoAspect = video.videoWidth / video.videoHeight;
-    const canvasAspect = canvas.width / canvas.height;
-
-    let w, h;
-
-    // CONTAIN VIDEO INSIDE SCREEN
-    if (videoAspect > canvasAspect) {
-
-      w = canvas.width;
-      h = w / videoAspect;
-
-    } else {
-
-      h = canvas.height;
-      w = h * videoAspect;
-    }
-
-    imgState.scale = w / video.videoWidth;
-
-    imgState.x = (canvas.width - w) / 2;
-    imgState.y = (canvas.height - h) / 2;
-
-    // ---------------------------------
-    // START COUNTY COLOR UPDATES
-    // ---------------------------------
-
-    startLiveUpdates();
-  };
-
-});
-
-// -----------------------------
-// 10. LIVE UPDATE LOOP
-// -----------------------------
-function startLiveUpdates() {
-  if (liveInterval) clearInterval(liveInterval);
-
-  liveInterval = setInterval(() => {
-    if (!map.isMoving() && !map.isZooming()) {
-      updateCountiesFromCanvas();
-    }
-  }, 550);
+  return [
+    x / coords.length,
+    y / coords.length
+  ];
 }
 
-// -----------------------------
-// 11. COLOR SAMPLING
-// -----------------------------
-function updateCountiesFromCanvas() {
-  const pixelData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+// --------------------------------
+// 9. COLOR SAMPLING
+// --------------------------------
+function updateBuildingsFromCanvas() {
 
-  const data = JSON.parse(JSON.stringify(countiesData));
+  if (!buildingsData) return;
 
-  data.features.forEach(feature => {
-    const coords = getRepresentativeCoords(feature.geometry);
-    if (!coords) return;
+  const pixelData = ctx.getImageData(
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  ).data;
 
-    const centroid = getCentroid(coords);
+  const updated = JSON.parse(
+    JSON.stringify(buildingsData)
+  );
 
-    let r = 0, g = 0, b = 0, count = 0;
+  updated.features.forEach(feature => {
 
-    sampleOffsets.forEach(offset => {
-      const point = map.project([
-        centroid[0] + (offset[0] - 0.5) * 0.02,
-        centroid[1] + (offset[1] - 0.5) * 0.02
-      ]);
+    const coords =
+      feature.geometry.coordinates[0];
 
-      const x = Math.floor(point.x);
-      const y = Math.floor(point.y);
+    if (!coords?.length) return;
 
-      if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return;
+    let r = 0;
+    let g = 0;
+    let b = 0;
+    let count = 0;
 
-      const i = (y * canvas.width + x) * 4;
-      if (pixelData[i + 3] <= 1) return;
+    // --------------------------------
+    // SAMPLE CENTROID
+    // --------------------------------
+    const centroid =
+      getPolygonCentroid(coords);
+
+    const p = map.project(centroid);
+
+    samplePixel(p.x, p.y);
+
+    // --------------------------------
+    // SAMPLE VERTICES
+    // --------------------------------
+    coords.forEach(coord => {
+
+      const pt = map.project(coord);
+
+      samplePixel(pt.x, pt.y);
+    });
+
+    function samplePixel(px, py) {
+
+      const x = Math.floor(px);
+      const y = Math.floor(py);
+
+      if (
+        x < 0 ||
+        y < 0 ||
+        x >= canvas.width ||
+        y >= canvas.height
+      ) return;
+
+      const i =
+        (y * canvas.width + x) * 4;
+
+      const alpha = pixelData[i + 3];
+
+      if (alpha < 10) return;
 
       r += pixelData[i];
       g += pixelData[i + 1];
       b += pixelData[i + 2];
-      count++;
-    });
 
-    feature.properties.color = count === 0
-      ? "#eeeeee"
-      : `rgb(${Math.floor(r / count)}, ${Math.floor(g / count)}, ${Math.floor(b / count)})`;
+      count++;
+    }
+
+    feature.properties.color =
+      count === 0
+        ? '#444444'
+        : `rgb(
+            ${Math.floor(r / count)},
+            ${Math.floor(g / count)},
+            ${Math.floor(b / count)}
+          )`;
+
   });
 
-  countiesData = data;
-  map.getSource('counties').setData(data);
+  buildingsData = updated;
+
+  map.getSource('buildings')
+    .setData(buildingsData);
 }
 
+// --------------------------------
+// 10. LIVE UPDATE LOOP
+// --------------------------------
+function startLiveUpdates() {
 
+  if (liveInterval) {
+    clearInterval(liveInterval);
+  }
 
+  liveInterval = setInterval(() => {
 
-document.getElementById('download').addEventListener('click', () => {
-    if (!countiesData?.features?.length) return;
+    if (
+      map.isMoving() ||
+      map.isZooming()
+    ) return;
 
-    // -----------------------------
-    // 1. TRUE GEO BOUNDS (fixed)
-    // -----------------------------
-    const bounds = new maplibregl.LngLatBounds();
+    updateBuildingsFromCanvas();
 
-    countiesData.features.forEach(f => {
-        const geom = f.geometry;
-        if (!geom) return;
+  }, 1000);
+}
 
-        if (geom.type === "Polygon") {
-            geom.coordinates.forEach(ring => {
-                ring.forEach(pt => bounds.extend(pt));
-            });
-        }
+// --------------------------------
+// 11. START WEBCAM
+// --------------------------------
+document
+  .getElementById('startLive')
+  .addEventListener('click', async () => {
 
-        if (geom.type === "MultiPolygon") {
-            geom.coordinates.forEach(poly => {
-                poly.forEach(ring => {
-                    ring.forEach(pt => bounds.extend(pt));
-                });
-            });
-        }
-    });
+    try {
 
-    // -----------------------------
-    // 2. Create export map
-    // -----------------------------
-    const container = document.createElement('div');
-    container.style.width = '3840px';
-    container.style.height = '2160px';
-    container.style.position = 'absolute';
-    container.style.top = '-9999px';
-    document.body.appendChild(container);
+      const stream =
+        await navigator.mediaDevices
+          .getUserMedia({
+            video: true
+          });
 
-    const renderMap = new maplibregl.Map({
-        container,
-        style: map.getStyle(),
-        interactive: false,
-        preserveDrawingBuffer: true,
-        attributionControl: false
-    });
+      video.srcObject = stream;
 
-    renderMap.on('load', () => {
-        renderMap.setRenderWorldCopies(false);
+      useVideoSource = true;
 
-        // -----------------------------
-        // 3. CRITICAL: exact camera
-        // -----------------------------
-        renderMap.fitBounds(bounds, {
-            padding: 0,
-            animate: false
-        });
+      video.onloadedmetadata = () => {
 
-        renderMap.once('idle', () => {
+  // --------------------------------
+  // MAP SIZE
+  // --------------------------------
+  const mapW = canvas.width;
+  const mapH = canvas.height;
 
-            const canvas = renderMap.getCanvas();
+  // --------------------------------
+  // VIDEO SIZE
+  // --------------------------------
+  const vidW = video.videoWidth;
+  const vidH = video.videoHeight;
 
-            // -----------------------------
-            // 4. ONLY crop to canvas bounds (NOT pixel detection)
-            // -----------------------------
-            const cropCanvas = document.createElement('canvas');
-            cropCanvas.width = canvas.width;
-            cropCanvas.height = canvas.height;
+  // --------------------------------
+  // SCALE VIDEO TO ~95% OF MAP
+  // --------------------------------
+  const scaleX = (mapW * 0.95) / vidW;
+  const scaleY = (mapH * 0.95) / vidH;
 
-            const ctx = cropCanvas.getContext('2d');
-            ctx.drawImage(canvas, 0, 0);
+  // preserve aspect ratio
+  imgState.scale = Math.max(scaleX, scaleY);
 
-            const link = document.createElement('a');
-            link.download = 'map-export.png';
-            link.href = cropCanvas.toDataURL('image/png');
-            link.click();
+  // --------------------------------
+  // FINAL SIZE
+  // --------------------------------
+  const finalW = vidW * imgState.scale;
+  const finalH = vidH * imgState.scale;
 
-            renderMap.remove();
-            document.body.removeChild(container);
-        });
-    });
+  // --------------------------------
+  // CENTER VIDEO
+  // --------------------------------
+  imgState.x = (mapW - finalW) / 2;
+  imgState.y = (mapH - finalH) / 2;
+
+  console.log(
+    `Webcam scaled to ${Math.round(finalW)}x${Math.round(finalH)}`
+  );
+};
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert(
+        'Camera access denied or unavailable.'
+      );
+    }
+  });
+
+// --------------------------------
+// 12. APPLY LIVE PAINTING
+// --------------------------------
+
+document
+  .getElementById('apply')
+  .addEventListener('click', () => {
+
+    // ensure webcam exists
+    if (
+      !useVideoSource ||
+      video.readyState < 2
+    ) {
+      alert("Start the webcam first.");
+      return;
+    }
+
+    // --------------------------------
+    // 1. SAMPLE CURRENT FRAME
+    // --------------------------------
+    updateBuildingsFromCanvas();
+
+    // --------------------------------
+    // 2. HIDE WEBCAM OVERLAY
+    // --------------------------------
+    canvas.style.opacity = 0;
+    canvas.style.pointerEvents = 'none';
+
+    // --------------------------------
+    // 3. STOP LIVE MODE
+    // --------------------------------
+    liveMode = false;
+
+    if (liveInterval) {
+      clearInterval(liveInterval);
+      liveInterval = null;
+    }
+
+    console.log("Applied webcam colors to buildings.");
+  });
+
+// --------------------------------
+// 13. STOP LIVE MODE
+// --------------------------------
+document
+  .getElementById('stop')
+  ?.addEventListener('click', () => {
+
+    liveMode = false;
+
+    canvas.style.pointerEvents = 'auto';
+
+    if (liveInterval) {
+      clearInterval(liveInterval);
+    }
+  });
+
+// --------------------------------
+// 14. EXPORT PNG
+// --------------------------------
+document
+  .getElementById('download')
+  .addEventListener('click', () => {
+
+    const exportCanvas = map.getCanvas();
+
+    const link = document.createElement('a');
+
+    link.download = 'building-paint-map.png';
+
+    link.href =
+      exportCanvas.toDataURL('image/png');
+
+    link.click();
+  });
+
+// --------------------------------
+// 15. INITIALIZATION
+// --------------------------------
+map.on('load', async () => {
+
+  map.getCanvas().style.background =
+    'transparent';
+
+  resizeCanvas();
+
+  renderOverlay();
+
+  await loadBuildings();
 });
+
+// reload buildings after move
+map.on('moveend', async () => {
+
+  await loadBuildings();
+});
+
