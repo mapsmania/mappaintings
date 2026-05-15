@@ -4,6 +4,8 @@
 // MapLibre + Overpass + Canvas Sampling
 // ================================
 
+const PIXEL_GRID_SIZE = 120;
+
 // --------------------------------
 // 1. MAP SETUP
 // --------------------------------
@@ -44,6 +46,18 @@ const canvas =
 const ctx = canvas.getContext('2d', {
   willReadFrequently: true
 });
+
+const sampleCanvas =
+  document.createElement('canvas');
+
+const sampleCtx =
+  sampleCanvas.getContext('2d');
+
+sampleCanvas.width =
+  PIXEL_GRID_SIZE;
+
+sampleCanvas.height =
+  PIXEL_GRID_SIZE;
 
 const video =
   document.getElementById('webcamVideo');
@@ -429,18 +443,33 @@ function updateBuildingsFromCanvas() {
 
   if (!buildingsData) return;
 
+  // --------------------------------
+  // DRAW LOW-RES WEBCAM
+  // --------------------------------
+  sampleCtx.clearRect(
+    0,
+    0,
+    PIXEL_GRID_SIZE,
+    PIXEL_GRID_SIZE
+  );
+
+  sampleCtx.drawImage(
+    canvas,
+    0,
+    0,
+    PIXEL_GRID_SIZE,
+    PIXEL_GRID_SIZE
+  );
+
   const pixelData =
-    ctx.getImageData(
+    sampleCtx.getImageData(
       0,
       0,
-      canvas.width,
-      canvas.height
+      PIXEL_GRID_SIZE,
+      PIXEL_GRID_SIZE
     ).data;
 
-  for (
-    const feature
-    of buildingsData.features
-  ) {
+  for (const feature of buildingsData.features) {
 
     const coords =
       feature.geometry.coordinates[0];
@@ -448,84 +477,44 @@ function updateBuildingsFromCanvas() {
     if (!coords?.length)
       continue;
 
-    let r = 0;
-    let g = 0;
-    let b = 0;
-    let count = 0;
+    // --------------------------------
+    // BUILDING CENTROID
+    // --------------------------------
+    const centroid =
+      getCentroid(coords);
 
-    // centroid
-    sampleCoord(
-      getCentroid(coords)
+    const p =
+      map.project(centroid);
+
+    // --------------------------------
+    // MAP SCREEN → LOW RES GRID
+    // --------------------------------
+    const gx = Math.floor(
+      (p.x / canvas.width) *
+      PIXEL_GRID_SIZE
     );
 
-    // vertices + edge midpoints
-    for (
-      let i = 0;
-      i < coords.length - 1;
-      i++
-    ) {
+    const gy = Math.floor(
+      (p.y / canvas.height) *
+      PIXEL_GRID_SIZE
+    );
 
-      const a = coords[i];
-      const b2 = coords[i + 1];
+    if (
+      gx < 0 ||
+      gy < 0 ||
+      gx >= PIXEL_GRID_SIZE ||
+      gy >= PIXEL_GRID_SIZE
+    ) continue;
 
-      sampleCoord(a);
-
-      sampleCoord([
-        (a[0] + b2[0]) / 2,
-        (a[1] + b2[1]) / 2
-      ]);
-    }
-
-    function sampleCoord(coord) {
-
-      const p =
-        map.project(coord);
-
-      samplePixel(
-        p.x,
-        p.y
-      );
-    }
-
-    function samplePixel(px, py) {
-
-      const x =
-        Math.floor(px);
-
-      const y =
-        Math.floor(py);
-
-      if (
-        x < 0 ||
-        y < 0 ||
-        x >= canvas.width ||
-        y >= canvas.height
-      ) return;
-
-      const i =
-        (y * canvas.width + x) * 4;
-
-      const alpha =
-        pixelData[i + 3];
-
-      if (alpha < 5)
-        return;
-
-      r += pixelData[i];
-      g += pixelData[i + 1];
-      b += pixelData[i + 2];
-
-      count++;
-    }
+    const i =
+      (gy * PIXEL_GRID_SIZE + gx) * 4;
 
     feature.properties.color =
-      count === 0
-        ? '#111111'
-        : `rgb(
-            ${Math.floor(r / count)},
-            ${Math.floor(g / count)},
-            ${Math.floor(b / count)}
-          )`;
+      `rgb(
+        ${pixelData[i]},
+        ${pixelData[i + 1]},
+        ${pixelData[i + 2]}
+      )`;
   }
 
   map
