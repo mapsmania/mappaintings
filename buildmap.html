@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Map Cam Selfie</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+
+  <style>
+    body { margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
+    
+    #map {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+    }
+
+    /* The canvas sits on top of the map */
+    #overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 5;
+      /* We handle pointer-events in JS to allow map panning */
+    }
+
+    /* Modern UI Container */
+    .controls {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+      backdrop-filter: blur(5px);
+      width: 220px;
+    }
+
+    /* Styling the buttons and custom file label */
+    button, .file-upload-label {
+      appearance: none;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+      display: block;
+    }
+
+    #apply {
+      background-color: #007AFF;
+      color: white;
+      box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+    }
+
+    #apply:hover {
+      background-color: #0063d1;
+      transform: translateY(-1px);
+    }
+
+    .file-upload-label {
+      background-color: #f0f0f0;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+
+    #upload { display: none; }
+
+    .instructions {
+      font-size: 11px;
+      color: #666;
+      line-height: 1.6;
+      margin-top: 5px;
+      border-top: 1px solid #eee;
+      padding-top: 10px;
+    }
+
+    /* Styling specifically for the selfie button */
+.download-btn {
+  background-color: #28a745; /* A nice green color */
+  color: white;
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+  margin-top: 4px; /* Optional: adds a tiny bit of extra space */
+}
+
+.download-btn:hover {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+.download-btn:active {
+  transform: translateY(0px);
+}
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <canvas id="overlay"></canvas>
+
+  <!-- ADD THIS HIDDEN VIDEO ELEMENT HERE -->
+  <video 
+  id="webcamVideo" 
+  autoplay 
+  playsinline 
+  muted
+  style="position:absolute; width:1px; height:1px; opacity:0; pointer-events:none;">
+</video>
+
+  <div class="controls">
+  <h3 style="margin:0 0 5px 0; font-size: 18px;">Map Cam Selfie</h3>
+  <p style="margin:0 0 10px 0; font-size: 12px; color: #666;">County Rasterizer</p>
+  
+  <button id="startLive">Use Webcam</button>
+  
+  <button id="apply">Apply to Counties</button>
+
+  <!-- Button moved here and absolute styling removed -->
+  <button id="download" class="download-btn">📸 Take Map Selfie</button>
+
+  <div class="instructions">
+  • <b>Press 'Use Webcam'</b><br>
+  • <b>Then press 'Apply to Counties'</b><br>
+  
+  <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+    <a href="https://googlemapsmania.blogspot.com/2026/05/map-cam-selfie.html" 
+       target="_blank" 
+       style="color: #007AFF; text-decoration: none; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+       ℹ️ About this project
+    </a>
+  </div>
+</div>
+</div> 
+
+
+  <!-- Ensure this filename matches your actual JS file (camapp.js or app.js) -->
+  <script src="buildcam.js"></script>
+</body>
+</html>
