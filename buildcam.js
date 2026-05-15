@@ -362,18 +362,7 @@ async function loadBuildings() {
       }
     });
 
-    map.addLayer({
-      id: 'buildings-outline',
-
-      type: 'line',
-
-      source: 'buildings',
-
-      paint: {
-        'line-color': '#000',
-        'line-width': 0.5
-      }
-    });
+    
   }
 
   console.log(
