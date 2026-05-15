@@ -351,12 +351,27 @@ function updateBuildingsFromCanvas() {
     // --------------------------------
     // SAMPLE VERTICES
     // --------------------------------
-    coords.forEach(coord => {
+  
+for (let i = 0; i < coords.length - 1; i++) {
 
-      const pt = map.project(coord);
+  const a = coords[i];
+  const b = coords[i + 1];
 
-      samplePixel(pt.x, pt.y);
-    });
+  sampleCoord(a);
+
+  // midpoint sample
+  sampleCoord([
+    (a[0] + b[0]) / 2,
+    (a[1] + b[1]) / 2
+  ]);
+}
+
+function sampleCoord(coord) {
+
+  const pt = map.project(coord);
+
+  samplePixel(pt.x, pt.y);
+}
 
     function samplePixel(px, py) {
 
