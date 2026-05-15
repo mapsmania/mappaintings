@@ -352,25 +352,51 @@ function updateBuildingsFromCanvas() {
     // SAMPLE VERTICES
     // --------------------------------
   
-for (let i = 0; i < coords.length - 1; i++) {
+function getCentroid(coords) {
 
-  const a = coords[i];
-  const b = coords[i + 1];
+  let area = 0;
+  let cx = 0;
+  let cy = 0;
 
-  sampleCoord(a);
+  for (let i = 0; i < coords.length - 1; i++) {
 
-  // midpoint sample
-  sampleCoord([
-    (a[0] + b[0]) / 2,
-    (a[1] + b[1]) / 2
-  ]);
-}
+    const x1 = coords[i][0];
+    const y1 = coords[i][1];
 
-function sampleCoord(coord) {
+    const x2 = coords[i + 1][0];
+    const y2 = coords[i + 1][1];
 
-  const pt = map.project(coord);
+    const f = (x1 * y2) - (x2 * y1);
 
-  samplePixel(pt.x, pt.y);
+    area += f;
+
+    cx += (x1 + x2) * f;
+    cy += (y1 + y2) * f;
+  }
+
+  area *= 0.5;
+
+  // fallback for invalid polygons
+  if (Math.abs(area) < 1e-7) {
+
+    let x = 0;
+    let y = 0;
+
+    coords.forEach(c => {
+      x += c[0];
+      y += c[1];
+    });
+
+    return [
+      x / coords.length,
+      y / coords.length
+    ];
+  }
+
+  cx /= (6 * area);
+  cy /= (6 * area);
+
+  return [cx, cy];
 }
 
     function samplePixel(px, py) {
