@@ -469,15 +469,42 @@ document
 // --------------------------------
 // 12. APPLY LIVE PAINTING
 // --------------------------------
+
 document
   .getElementById('apply')
   .addEventListener('click', () => {
 
-    liveMode = true;
+    // ensure webcam exists
+    if (
+      !useVideoSource ||
+      video.readyState < 2
+    ) {
+      alert("Start the webcam first.");
+      return;
+    }
 
+    // --------------------------------
+    // 1. SAMPLE CURRENT FRAME
+    // --------------------------------
+    updateBuildingsFromCanvas();
+
+    // --------------------------------
+    // 2. HIDE WEBCAM OVERLAY
+    // --------------------------------
+    canvas.style.opacity = 0;
     canvas.style.pointerEvents = 'none';
 
-    startLiveUpdates();
+    // --------------------------------
+    // 3. STOP LIVE MODE
+    // --------------------------------
+    liveMode = false;
+
+    if (liveInterval) {
+      clearInterval(liveInterval);
+      liveInterval = null;
+    }
+
+    console.log("Applied webcam colors to buildings.");
   });
 
 // --------------------------------
