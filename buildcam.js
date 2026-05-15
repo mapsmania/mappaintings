@@ -443,18 +443,43 @@ document
 
       video.onloadedmetadata = () => {
 
-        imgState.scale = 0.5;
+  // --------------------------------
+  // MAP SIZE
+  // --------------------------------
+  const mapW = canvas.width;
+  const mapH = canvas.height;
 
-        imgState.x =
-          (canvas.width / 2) -
-          (video.videoWidth * imgState.scale / 2);
+  // --------------------------------
+  // VIDEO SIZE
+  // --------------------------------
+  const vidW = video.videoWidth;
+  const vidH = video.videoHeight;
 
-        imgState.y =
-          (canvas.height / 2) -
-          (video.videoHeight * imgState.scale / 2);
+  // --------------------------------
+  // SCALE VIDEO TO ~95% OF MAP
+  // --------------------------------
+  const scaleX = (mapW * 0.95) / vidW;
+  const scaleY = (mapH * 0.95) / vidH;
 
-        console.log("Camera ready");
-      };
+  // preserve aspect ratio
+  imgState.scale = Math.max(scaleX, scaleY);
+
+  // --------------------------------
+  // FINAL SIZE
+  // --------------------------------
+  const finalW = vidW * imgState.scale;
+  const finalH = vidH * imgState.scale;
+
+  // --------------------------------
+  // CENTER VIDEO
+  // --------------------------------
+  imgState.x = (mapW - finalW) / 2;
+  imgState.y = (mapH - finalH) / 2;
+
+  console.log(
+    `Webcam scaled to ${Math.round(finalW)}x${Math.round(finalH)}`
+  );
+};
 
     } catch (err) {
 
